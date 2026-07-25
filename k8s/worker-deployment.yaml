@@ -23,8 +23,8 @@ spec:
     spec:
       containers:
         - name: devpulse-worker
-          image: devpulse-worker:latest
-          imagePullPolicy: IfNotPresent
+          image: 877766546073.dkr.ecr.us-east-1.amazonaws.com/devpulse/backend:worker
+          imagePullPolicy: Always
           env:
             - name: DOTNET_ENVIRONMENT
               value: "Production"

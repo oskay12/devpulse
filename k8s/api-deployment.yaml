@@ -23,8 +23,8 @@ spec:
     spec:
       containers:
         - name: devpulse-api
-          image: devpulse-api:latest
-          imagePullPolicy: IfNotPresent
+          image: 877766546073.dkr.ecr.us-east-1.amazonaws.com/devpulse/backend:api
+          imagePullPolicy: Always
           ports:
             - name: http
               containerPort: 8080
