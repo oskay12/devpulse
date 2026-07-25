@@ -6,3 +6,6 @@ CLAUDE.md
 bin/
 obj/
 *.user
+
+# Real K8s secret manifests (only the .template version is checked in)
+k8s/secret.yaml

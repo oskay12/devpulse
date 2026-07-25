@@ -12,6 +12,15 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
 
 var app = builder.Build();
 
+// Apply pending EF Core migrations on startup so the DB schema stays in
+// sync with deployments (acceptable for this service's low-traffic
+// startup path; revisit with a dedicated migration job if that changes).
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
+
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {

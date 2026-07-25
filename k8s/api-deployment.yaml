@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devpulse-api
+  namespace: devpulse
+  labels:
+    app: devpulse-api
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: devpulse-api
+  template:
+    metadata:
+      labels:
+        app: devpulse-api
+    spec:
+      containers:
+        - name: devpulse-api
+          image: devpulse-api:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: ASPNETCORE_ENVIRONMENT
+              value: "Production"
+            - name: DatabaseSettings__ConnectionString
+              valueFrom:
+                secretKeyRef:
+                  name: devpulse-db-secret
+                  key: DatabaseSettings__ConnectionString
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+          # TODO: swap for a dedicated /health endpoint once one exists;
+          # /weatherforecast is only used here because it's the sole route
+          # the template currently exposes.
+          readinessProbe:
+            httpGet:
+              path: /weatherforecast
+              port: http
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /weatherforecast
+              port: http
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            timeoutSeconds: 3
+            failureThreshold: 3
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: devpulse-api
+  namespace: devpulse
+  labels:
+    app: devpulse-api
+spec:
+  type: ClusterIP
+  selector:
+    app: devpulse-api
+  ports:
+    - name: http
+      port: 80
+      targetPort: http

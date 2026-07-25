@@ -1,0 +1,42 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: devpulse-worker
+  namespace: devpulse
+  labels:
+    app: devpulse-worker
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 0
+  selector:
+    matchLabels:
+      app: devpulse-worker
+  template:
+    metadata:
+      labels:
+        app: devpulse-worker
+    spec:
+      containers:
+        - name: devpulse-worker
+          image: devpulse-worker:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: DOTNET_ENVIRONMENT
+              value: "Production"
+            - name: DatabaseSettings__ConnectionString
+              valueFrom:
+                secretKeyRef:
+                  name: devpulse-db-secret
+                  key: DatabaseSettings__ConnectionString
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
