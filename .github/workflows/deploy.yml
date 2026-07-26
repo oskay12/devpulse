@@ -34,6 +34,12 @@ jobs:
         id: ecr-login
         uses: aws-actions/amazon-ecr-login@v2
 
+      - name: Mirror RabbitMQ image to ECR
+        run: |
+          docker pull rabbitmq:3-management
+          docker tag rabbitmq:3-management ${{ steps.ecr-login.outputs.registry }}/devpulse/rabbitmq:3-management
+          docker push ${{ steps.ecr-login.outputs.registry }}/devpulse/rabbitmq:3-management
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
@@ -75,14 +81,14 @@ jobs:
           kubectl set image deployment/devpulse-api \
             devpulse-api=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO_API }}:${{ github.sha }} \
             -n ${{ env.K8S_NAMESPACE }}
-          kubectl rollout status deployment/devpulse-api -n ${{ env.K8S_NAMESPACE }} --timeout=180s
+          kubectl rollout status deployment/devpulse-api -n ${{ env.K8S_NAMESPACE }} --timeout=300s
 
       - name: Deploy Worker image to EKS
         run: |
           kubectl set image deployment/devpulse-worker \
             devpulse-worker=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO_WORKER }}:${{ github.sha }} \
             -n ${{ env.K8S_NAMESPACE }}
-          kubectl rollout status deployment/devpulse-worker -n ${{ env.K8S_NAMESPACE }} --timeout=180s
+          kubectl rollout status deployment/devpulse-worker -n ${{ env.K8S_NAMESPACE }} --timeout=300s
 
       - name: Run automated post-deploy smoke test
         run: |
