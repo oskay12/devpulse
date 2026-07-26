@@ -23,7 +23,9 @@ spec:
     spec:
       containers:
         - name: devpulse-api
-          image: 877766546073.dkr.ecr.us-east-1.amazonaws.com/devpulse/backend:api
+          # Baseline image for a fresh `kubectl apply`; the CI/CD pipeline
+          # overwrites the running tag on every deploy via `kubectl set image`.
+          image: 877766546073.dkr.ecr.us-east-1.amazonaws.com/devpulse/api:latest
           imagePullPolicy: Always
           ports:
             - name: http

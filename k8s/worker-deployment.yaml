@@ -23,7 +23,9 @@ spec:
     spec:
       containers:
         - name: devpulse-worker
-          image: 877766546073.dkr.ecr.us-east-1.amazonaws.com/devpulse/backend:worker
+          # Baseline image for a fresh `kubectl apply`; the CI/CD pipeline
+          # overwrites the running tag on every deploy via `kubectl set image`.
+          image: 877766546073.dkr.ecr.us-east-1.amazonaws.com/devpulse/worker:latest
           imagePullPolicy: Always
           env:
             - name: DOTNET_ENVIRONMENT
