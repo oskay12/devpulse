@@ -1,5 +1,8 @@
 using DevPulse.Core.Entities;
+using DevPulse.Core.Exceptions;
+using DevPulse.Infrastructure.Data.Converters;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 
 namespace DevPulse.Infrastructure.Data;
 
@@ -26,6 +29,68 @@ public class ApplicationDbContext : DbContext
     public DbSet<CodeHealthScore> CodeHealthScores => Set<CodeHealthScore>();
     public DbSet<ArchitecturalPattern> ArchitecturalPatterns => Set<ArchitecturalPattern>();
     public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
+
+    /// <summary>
+    /// Translates PostgreSQL constraint violations into domain exceptions, so a
+    /// duplicate insert surfaces as 409 rather than an opaque 500. Services check
+    /// uniqueness up front where they can, but concurrent requests still race —
+    /// the database is the only place that decides, so this is the backstop.
+    /// </summary>
+    public override async Task<int> SaveChangesAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            return await base.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+            when (ex.InnerException is PostgresException postgres && Translate(postgres, ex) is { } translated)
+        {
+            throw translated;
+        }
+    }
+
+    /// <inheritdoc cref="SaveChangesAsync(CancellationToken)"/>
+    public override int SaveChanges()
+    {
+        try
+        {
+            return base.SaveChanges();
+        }
+        catch (DbUpdateException ex)
+            when (ex.InnerException is PostgresException postgres && Translate(postgres, ex) is { } translated)
+        {
+            throw translated;
+        }
+    }
+
+    /// <summary>
+    /// Maps a PostgreSQL error to a domain exception, or returns <see langword="null"/>
+    /// to let the original exception propagate with its stack trace intact.
+    /// </summary>
+    private static DevPulseException? Translate(PostgresException postgres, DbUpdateException source) =>
+        postgres.SqlState switch
+        {
+            // Constraint names are deliberately not echoed to callers; the full
+            // PostgresException is preserved as InnerException for the logs.
+            PostgresErrorCodes.UniqueViolation =>
+                new ConflictException("A record with the same unique value already exists.", source),
+            PostgresErrorCodes.ForeignKeyViolation =>
+                new DomainValidationException("A referenced record does not exist.", source),
+            _ => null
+        };
+
+    /// <summary>
+    /// Applies the UTC normalisation converters to every <see cref="DateTime"/>
+    /// property in the model. See <see cref="UtcDateTimeConverter"/> for why this
+    /// is mandatory against this schema.
+    /// </summary>
+    protected override void ConfigureConventions(ModelConfigurationBuilder configurationBuilder)
+    {
+        base.ConfigureConventions(configurationBuilder);
+
+        configurationBuilder.Properties<DateTime>().HaveConversion<UtcDateTimeConverter>();
+        configurationBuilder.Properties<DateTime?>().HaveConversion<UtcNullableDateTimeConverter>();
+    }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

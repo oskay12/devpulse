@@ -23,8 +23,6 @@ spec:
     spec:
       containers:
         - name: devpulse-worker
-          # Baseline image for a fresh `kubectl apply`; the CI/CD pipeline
-          # overwrites the running tag on every deploy via `kubectl set image`.
           image: 877766546073.dkr.ecr.us-east-1.amazonaws.com/devpulse/worker:latest
           imagePullPolicy: Always
           env:
@@ -35,6 +33,41 @@ spec:
                 secretKeyRef:
                   name: devpulse-db-secret
                   key: DatabaseSettings__ConnectionString
+            - name: OpenSearch__Endpoint
+              valueFrom:
+                configMapKeyRef:
+                  name: devpulse-config
+                  key: OpenSearch__Endpoint
+            - name: OpenSearch__AuthMode
+              valueFrom:
+                configMapKeyRef:
+                  name: devpulse-config
+                  key: OpenSearch__AuthMode
+            - name: OpenSearch__Username
+              valueFrom:
+                secretKeyRef:
+                  name: devpulse-opensearch-secret
+                  key: OpenSearch__Username
+            - name: OpenSearch__Password
+              valueFrom:
+                secretKeyRef:
+                  name: devpulse-opensearch-secret
+                  key: OpenSearch__Password
+            - name: RabbitMq__HostName
+              valueFrom:
+                configMapKeyRef:
+                  name: devpulse-config
+                  key: RabbitMq__HostName
+            - name: RabbitMq__Username
+              valueFrom:
+                secretKeyRef:
+                  name: devpulse-rabbitmq-secret
+                  key: RabbitMq__Username
+            - name: RabbitMq__Password
+              valueFrom:
+                secretKeyRef:
+                  name: devpulse-rabbitmq-secret
+                  key: RabbitMq__Password
           resources:
             requests:
               cpu: "100m"

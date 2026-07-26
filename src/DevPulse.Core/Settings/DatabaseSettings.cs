@@ -6,6 +6,9 @@ namespace DevPulse.Core.Settings;
 /// </summary>
 public class DatabaseSettings
 {
+    /// <summary>Configuration section name.</summary>
+    public const string SectionName = "DatabaseSettings";
+
     /// <summary>PostgreSQL connection string</summary>
     [JsonPropertyName("connection_string")]
     [Required]

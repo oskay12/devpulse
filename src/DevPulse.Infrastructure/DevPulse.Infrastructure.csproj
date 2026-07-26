@@ -5,6 +5,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- The Worker hosts the queue consumers, which need the connection provider
+         and the shared topology/serialiser. Exposing them to that project keeps
+         them out of the public API surface. -->
+    <InternalsVisibleTo Include="DevPulse.Worker" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="10.0.10">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -12,6 +19,17 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.3" />
     <PackageReference Include="Microsoft.EntityFrameworkCore" Version="10.0.10" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Relational" Version="10.0.10" />
+    <PackageReference Include="Microsoft.Extensions.Options.ConfigurationExtensions" Version="10.0.0" />
+    <!-- ValidateDataAnnotations() lives here; ValidateOnStart() and
+         BackgroundService come from Microsoft.Extensions.Hosting. -->
+    <PackageReference Include="Microsoft.Extensions.Options.DataAnnotations" Version="10.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="10.0.0" />
+    <!-- User.PasswordHash is NOT NULL, so creating a user requires hashing.
+         BCrypt matches the algorithm documented on the entity. -->
+    <PackageReference Include="BCrypt.Net-Next" Version="4.2.1" />
+    <PackageReference Include="OpenSearch.Client" Version="2.0.0" />
+    <PackageReference Include="OpenSearch.Net.Auth.AwsSigV4" Version="2.0.0" />
+    <PackageReference Include="RabbitMQ.Client" Version="7.2.1" />
   </ItemGroup>
 
   <PropertyGroup>

@@ -64,6 +64,14 @@ jobs:
       - name: Update kubeconfig for EKS
         run: aws eks update-kubeconfig --region ${{ env.AWS_REGION }} --name ${{ env.EKS_CLUSTER_NAME }}
 
+      - name: Apply K8s manifests
+        run: |
+          kubectl apply -f k8s/configmap.yaml \
+                        -f k8s/rabbitmq.yaml \
+                        -f k8s/api-deployment.yaml \
+                        -f k8s/worker-deployment.yaml \
+                        -n ${{ env.K8S_NAMESPACE }}
+
       - name: Deploy API image to EKS
         run: |
           kubectl set image deployment/devpulse-api \

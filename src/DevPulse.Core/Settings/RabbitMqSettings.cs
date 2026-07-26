@@ -5,6 +5,9 @@ namespace DevPulse.Core.Settings;
 /// </summary>
 public class RabbitMqSettings
 {
+    /// <summary>Configuration section name.</summary>
+    public const string SectionName = "RabbitMq";
+
     /// <summary>RabbitMQ hostname (K8s service name)</summary>
     [JsonPropertyName("host_name")]
     [Required]

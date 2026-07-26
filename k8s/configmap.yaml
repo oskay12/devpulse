@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: devpulse-config
+  namespace: devpulse
+data:
+  OpenSearch__Endpoint: "https://search-devpulse-c2is24iyceyl.us-east-1.es.amazonaws.com"
+  OpenSearch__AuthMode: "BasicAuth"
+  OpenSearch__CommitsIndex: "devpulse-commits"
+  OpenSearch__PullRequestsIndex: "devpulse-pull-requests"
+  OpenSearch__ReviewsIndex: "devpulse-reviews"
+  RabbitMq__HostName: "devpulse-rabbitmq"

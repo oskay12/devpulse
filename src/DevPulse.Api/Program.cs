@@ -1,56 +1,73 @@
-using DevPulse.Infrastructure.Data;
-using Microsoft.EntityFrameworkCore;
+using DevPulse.Api.ErrorHandling;
+using DevPulse.Api.HealthChecks;
+using DevPulse.Core.Settings;
+using DevPulse.Infrastructure.Extensions;
+using Microsoft.Extensions.Diagnostics.HealthChecks;
+using Microsoft.Extensions.Options;
+using Scalar.AspNetCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+builder.Services.AddDevPulseOptions(builder.Configuration);
+builder.Services.AddDevPulsePersistence();
+builder.Services.AddDevPulseSearch();
+builder.Services.AddDevPulseMessaging();
+builder.Services.AddDevPulseApplicationServices();
+
+builder.Services.AddControllers();
+
+builder.Services.AddProblemDetails();
+builder.Services.AddExceptionHandler<GlobalExceptionHandler>();
+
 builder.Services.AddOpenApi();
 
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseNpgsql(builder.Configuration["DatabaseSettings:ConnectionString"]));
+builder.Services.AddHealthChecks()
+    .AddNpgSql(
+        connectionStringFactory: serviceProvider =>
+            serviceProvider.GetRequiredService<IOptions<DatabaseSettings>>().Value.ConnectionString,
+        name: "postgres",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: ["ready"])
+    .AddCheck<OpenSearchHealthCheck>(
+        "opensearch",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: ["ready"])
+    .AddCheck<RabbitMqHealthCheck>(
+        "rabbitmq",
+        failureStatus: HealthStatus.Unhealthy,
+        tags: ["ready"]);
 
 var app = builder.Build();
 
-// Apply pending EF Core migrations on startup so the DB schema stays in
-// sync with deployments (acceptable for this service's low-traffic
-// startup path; revisit with a dedicated migration job if that changes).
-using (var scope = app.Services.CreateScope())
+// ValidateOnStart() would otherwise run inside app.Run(), i.e. after the
+// migration below. Forcing it here means a bad connection string or a missing
+// OpenSearch password fails immediately instead of after a database round trip.
+app.Services.GetRequiredService<IStartupValidator>().Validate();
+
+// Applied under an advisory lock so the two API replicas cannot race. Can be
+// turned off to run schema changes from a dedicated job instead of on startup.
+if (builder.Configuration.GetValue("Database:AutoMigrate", true))
 {
-    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
-    await dbContext.Database.MigrateAsync();
+    await app.Services.MigrateDevPulseDatabaseAsync();
 }
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+// First in the pipeline: also catches exceptions thrown by later middleware.
+app.UseExceptionHandler();
+
+// Off by default. The API sits behind an internal ClusterIP service, but the
+// schema still describes every endpoint, so exposing it stays an explicit choice.
+if (builder.Configuration.GetValue("Swagger:Enabled", app.Environment.IsDevelopment()))
 {
     app.MapOpenApi();
+    app.MapScalarApiReference();
 }
 
-app.UseHttpsRedirection();
+// Liveness deliberately checks nothing but the process itself: a database blip
+// must not restart otherwise-healthy pods. Readiness is what pulls a pod out of
+// the load balancer while a dependency is down.
+app.MapHealthChecks("/health/live", new() { Predicate = _ => false });
+app.MapHealthChecks("/health/ready", new() { Predicate = check => check.Tags.Contains("ready") });
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+app.MapControllers();
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}
