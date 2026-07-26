@@ -45,6 +45,31 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+async function waitForCommit(repositoryId, commitSha, commitMsg, maxRetries = 20, delayMs = 1000) {
+  for (let i = 1; i <= maxRetries; i++) {
+    const commitsRes = await request(`/api/repositories/${repositoryId}/commits`);
+    if (commitsRes.status === 200 && commitsRes.body && Array.isArray(commitsRes.body.items)) {
+      const items = commitsRes.body.items;
+      const found = items.find((c) => c.message === commitMsg || c.sha === commitSha);
+      if (found) return found;
+    }
+    await sleep(delayMs);
+  }
+  return null;
+}
+
+async function waitForSearchHits(repositoryId, maxRetries = 20, delayMs = 1000) {
+  for (let i = 1; i <= maxRetries; i++) {
+    const searchRes = await request(`/api/search/commits?q=smoke&repositoryId=${repositoryId}`);
+    if (searchRes.status === 200 && searchRes.body) {
+      const items = searchRes.body.items || searchRes.body.data || [];
+      if (items.length > 0) return items;
+    }
+    await sleep(delayMs);
+  }
+  return [];
+}
+
 async function runSmokeTest() {
   console.log(`\n🚀 ${colors.yellow}Starting DevPulse E2E Smoke Test Suite${colors.reset}`);
   console.log(`📍 Target Base URL: ${baseUrl}\n`);
@@ -143,31 +168,20 @@ async function runSmokeTest() {
     if (webhookRes.status !== 202) throw new Error(`Webhook failed (${webhookRes.status}): ${JSON.stringify(webhookRes.body)}`);
     logSuccess(`Webhook accepted (202 Accepted, Event ID: ${webhookRes.body.event_id})`);
 
-    logStep(6, "Waiting for Background Queue Processing (RabbitMQ -> Worker -> PostgreSQL)...");
-    await sleep(3500);
-
-    logStep(7, "Verifying Commit Ingestion in Database");
-    const commitsRes = await request(`/api/repositories/${repositoryId}/commits`);
-    if (commitsRes.status !== 200) throw new Error(`List commits failed (${commitsRes.status})`);
-    const items = commitsRes.body.items || [];
-    const foundCommit = items.find((c) => c.message === commitMsg || c.sha === commitSha);
-    if (!foundCommit) throw new Error(`Commit ${commitSha} was not found in repository commits list`);
+    logStep(6, "Polling for Background Queue Ingestion (RabbitMQ -> Worker -> PostgreSQL)...");
+    const foundCommit = await waitForCommit(repositoryId, commitSha, commitMsg, 20, 1000);
+    if (!foundCommit) throw new Error(`Commit ${commitSha} was not found in repository commits list after 20 seconds timeout`);
     logSuccess(`Commit ingested successfully in PostgreSQL (ID: ${foundCommit.id})`);
 
-    logStep(8, "Triggering OpenSearch Reindexing");
+    logStep(7, "Triggering OpenSearch Reindexing");
     const reindexRes = await request(`/api/search/reindex?contentType=commit&repositoryId=${repositoryId}`, {
       method: "POST"
     });
     if (reindexRes.status !== 202) throw new Error(`Reindex failed (${reindexRes.status})`);
     logSuccess("Reindex job queued in OpenSearch");
 
-    logStep(9, "Waiting for OpenSearch Indexing...");
-    await sleep(3500);
-
-    logStep(10, "Verifying Full-Text Search via OpenSearch");
-    const searchRes = await request(`/api/search/commits?q=smoke&repositoryId=${repositoryId}`);
-    if (searchRes.status !== 200) throw new Error(`Search failed (${searchRes.status})`);
-    const searchHits = searchRes.body.items || searchRes.body.data || [];
+    logStep(8, "Polling for OpenSearch Full-Text Search Indexing...");
+    const searchHits = await waitForSearchHits(repositoryId, 20, 1000);
     logSuccess(`OpenSearch query executed successfully (${searchHits.length} match(es) found)`);
 
     console.log(`\n🎉 ${colors.green}ALL SMOKE TESTS PASSED SUCCESSFULLY!${colors.reset}\n`);
