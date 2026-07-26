@@ -83,3 +83,7 @@ jobs:
             devpulse-worker=${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPO_WORKER }}:${{ github.sha }} \
             -n ${{ env.K8S_NAMESPACE }}
           kubectl rollout status deployment/devpulse-worker -n ${{ env.K8S_NAMESPACE }} --timeout=180s
+
+      - name: Run automated post-deploy smoke test
+        run: |
+          node scripts/smoke-test.js
