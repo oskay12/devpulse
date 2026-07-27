@@ -2,7 +2,7 @@
 
 DevPulse is a cloud-native developer and repository analytics platform designed to ingest, process, and index developer activity (commits, pull requests, code reviews, and metrics) from GitHub and GitLab in real-time, providing full-text search and aggregated insights.
 
----
+--- 
 
 ## 🏗️ System Architecture
 
