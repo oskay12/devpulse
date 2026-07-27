@@ -83,6 +83,7 @@ devpulse/
 │   ├── DevPulse.Infrastructure/   - DbContext, Repositories, OpenSearch & RabbitMQ Integration
 │   ├── DevPulse.Api/              - Controllers, Pipeline, OpenApi, Global Exception Handler & Health Checks
 │   └── DevPulse.Worker/           - Background Service Host, RabbitMQ Consumers & Index Bootstrapper
+├── web/                            - Vue 3 (Vite) SPA dashboard — see web/README section below
 ├── terraform/                     - Infrastructure as Code (VPC, EKS, RDS, OpenSearch, ECR) + bootstrap & SETUP.md
 ├── k8s/                           - Kubernetes Manifests (ConfigMap, Secrets, Deployments, StatefulSet)
 ├── scripts/                       - Automated E2E Smoke Test Script (smoke-test.js)
