@@ -28,13 +28,13 @@ module "vpc" {
   # Required by the EKS control plane / AWS Load Balancer Controller so it can
   # place internal and internet-facing load balancers on the right subnets.
   public_subnet_tags = {
-    "kubernetes.io/role/elb"                            = "1"
-    "kubernetes.io/cluster/${var.eks_cluster_name}"     = "shared"
+    "kubernetes.io/role/elb"                        = "1"
+    "kubernetes.io/cluster/${var.eks_cluster_name}" = "shared"
   }
 
   private_subnet_tags = {
-    "kubernetes.io/role/internal-elb"                   = "1"
-    "kubernetes.io/cluster/${var.eks_cluster_name}"     = "shared"
+    "kubernetes.io/role/internal-elb"               = "1"
+    "kubernetes.io/cluster/${var.eks_cluster_name}" = "shared"
   }
 
   tags = local.common_tags

@@ -63,9 +63,9 @@ resource "aws_db_instance" "postgres" {
   multi_az               = var.rds_multi_az
   publicly_accessible    = false
 
-  backup_retention_period = var.rds_backup_retention_days
-  deletion_protection     = var.rds_deletion_protection
-  skip_final_snapshot     = !var.rds_deletion_protection
+  backup_retention_period   = var.rds_backup_retention_days
+  deletion_protection       = var.rds_deletion_protection
+  skip_final_snapshot       = !var.rds_deletion_protection
   final_snapshot_identifier = var.rds_deletion_protection ? "${local.name_prefix}-rds-final" : null
 
   # Ship PostgreSQL logs to CloudWatch for prod observability.

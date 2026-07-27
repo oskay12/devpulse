@@ -15,8 +15,8 @@ environment = "prod"
 aws_region  = "us-east-1"
 
 # --- Networking ---
-vpc_cidr           = "10.0.0.0/16"
-az_count           = 2
+vpc_cidr = "10.0.0.0/16"
+az_count = 2
 # For real prod, prefer one NAT gateway per AZ for HA (higher cost):
 single_nat_gateway = true
 

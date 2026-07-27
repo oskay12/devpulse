@@ -24,4 +24,7 @@ override.tf.json
 .terraformrc
 terraform.rc
 *.tfplan
-.terraform.lock.hcl
+
+# NOTE: .terraform.lock.hcl is intentionally NOT ignored — the provider
+# lock file SHOULD be committed so `terraform init` selects identical
+# provider versions on every machine / in CI (reproducible builds).
