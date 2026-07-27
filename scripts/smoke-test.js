@@ -20,25 +20,67 @@ function logError(message) {
   console.log(`  ${colors.red}✖ ${message}${colors.reset}`);
 }
 
+function logWarn(message) {
+  console.log(`  ${colors.yellow}⟳ ${message}${colors.reset}`);
+}
+
+// Transient statuses returned by the load balancer while a freshly rolled-out
+// pod is still warming up (not yet registered/healthy in the ELB target group).
+// These are retried; genuine app errors (4xx/500) are NOT — they surface at once.
+const RETRYABLE_STATUSES = new Set([502, 503, 504]);
+const MAX_ATTEMPTS = 8;
+const BASE_BACKOFF_MS = 1000;
+const MAX_BACKOFF_MS = 8000;
+
 async function request(path, options = {}) {
   const url = `${baseUrl}${path}`;
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      "Content-Type": "application/json",
-      ...(options.headers || {})
-    }
-  });
 
-  const contentType = response.headers.get("content-type") || "";
-  let body = null;
-  if (contentType.includes("application/json")) {
-    body = await response.json();
-  } else {
-    body = await response.text();
+  let lastError = null;
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    let response;
+    try {
+      response = await fetch(url, {
+        ...options,
+        headers: {
+          "Content-Type": "application/json",
+          ...(options.headers || {})
+        }
+      });
+    } catch (err) {
+      // Network-level failure (connection reset/refused during rollout) — retry.
+      lastError = err;
+      if (attempt < MAX_ATTEMPTS) {
+        await sleep(backoffDelay(attempt));
+        continue;
+      }
+      throw err;
+    }
+
+    // Retry gateway errors from the ELB while the new pod stabilises.
+    if (RETRYABLE_STATUSES.has(response.status) && attempt < MAX_ATTEMPTS) {
+      const delay = backoffDelay(attempt);
+      logWarn(`${response.status} on ${path} (attempt ${attempt}/${MAX_ATTEMPTS}), retrying in ${delay}ms...`);
+      await sleep(delay);
+      continue;
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    let body = null;
+    if (contentType.includes("application/json")) {
+      body = await response.json();
+    } else {
+      body = await response.text();
+    }
+
+    return { status: response.status, body, headers: response.headers };
   }
 
-  return { status: response.status, body, headers: response.headers };
+  throw lastError ?? new Error(`Request to ${path} failed after ${MAX_ATTEMPTS} attempts`);
+}
+
+// Exponential backoff with a ceiling.
+function backoffDelay(attempt) {
+  return Math.min(BASE_BACKOFF_MS * 2 ** (attempt - 1), MAX_BACKOFF_MS);
 }
 
 function sleep(ms) {
@@ -70,6 +112,28 @@ async function waitForSearchHits(repositoryId, maxRetries = 20, delayMs = 1000) 
   return [];
 }
 
+// Poll /health/ready until it returns 200 several times in a row, so we don't
+// start on a single lucky response while the ELB is still shifting traffic to a
+// freshly rolled-out pod. request() already retries gateway errors underneath.
+async function warmUp(requiredConsecutive = 3, maxRetries = 30, delayMs = 2000) {
+  let consecutive = 0;
+  for (let i = 1; i <= maxRetries; i++) {
+    try {
+      const res = await request("/health/ready");
+      if (res.status === 200) {
+        consecutive++;
+        if (consecutive >= requiredConsecutive) return;
+      } else {
+        consecutive = 0;
+      }
+    } catch {
+      consecutive = 0;
+    }
+    await sleep(delayMs);
+  }
+  throw new Error("API did not become stable (health/ready) within the warm-up window");
+}
+
 async function runSmokeTest() {
   console.log(`\n🚀 ${colors.yellow}Starting DevPulse E2E Smoke Test Suite${colors.reset}`);
   console.log(`📍 Target Base URL: ${baseUrl}\n`);
@@ -82,6 +146,10 @@ async function runSmokeTest() {
   const externalId = `ext_${timestamp}`;
 
   try {
+    logStep(0, "Warming up — waiting for API to serve stable traffic after rollout");
+    await warmUp();
+    logSuccess("API is warm and serving requests");
+
     logStep(1, "Checking Health Endpoints (/health/live & /health/ready)");
     const liveRes = await request("/health/live");
     if (liveRes.status !== 200) throw new Error(`Liveness failed with status ${liveRes.status}`);
