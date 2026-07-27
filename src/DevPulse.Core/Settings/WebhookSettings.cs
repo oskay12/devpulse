@@ -22,4 +22,18 @@ public class WebhookSettings
     /// </remarks>
     [JsonPropertyName("github_secret")]
     public string? GitHubSecret { get; set; }
+
+    /// <summary>
+    /// Personal access token used to call the GitHub REST API (commit stats) after
+    /// a push is ingested.
+    /// </summary>
+    /// <remarks>
+    /// Optional and separate from <see cref="GitHubSecret"/>: that secret only
+    /// verifies inbound webhook signatures and grants no API access. Without this
+    /// token, per-commit additions/deletions stay zero — private repositories return
+    /// 404 from the commit-detail endpoint without authentication, and even public
+    /// repositories hit GitHub's low unauthenticated rate limit quickly.
+    /// </remarks>
+    [JsonPropertyName("github_api_token")]
+    public string? GitHubApiToken { get; set; }
 }

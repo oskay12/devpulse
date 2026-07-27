@@ -68,6 +68,12 @@ spec:
                 secretKeyRef:
                   name: devpulse-rabbitmq-secret
                   key: RabbitMq__Password
+            - name: Webhooks__GitHubApiToken
+              valueFrom:
+                secretKeyRef:
+                  name: devpulse-webhook-secret
+                  key: Webhooks__GitHubApiToken
+                  optional: true
           resources:
             requests:
               cpu: "100m"

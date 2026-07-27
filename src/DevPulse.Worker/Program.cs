@@ -10,6 +10,7 @@ builder.Services.AddDevPulsePersistence();
 builder.Services.AddDevPulseSearch();
 builder.Services.AddDevPulseMessaging();
 builder.Services.AddDevPulseApplicationServices();
+builder.Services.AddDevPulseCommitStatsProviders();
 
 // The Worker owns index creation rather than the API: it runs a single replica, so
 // there is no startup race, and it is the only process that writes to the indices.

@@ -122,4 +122,21 @@ public static class ServiceCollectionExtensions
 
         return services;
     }
+
+    /// <summary>
+    /// Registers the enrichment client that fetches per-commit line-change stats
+    /// from the source provider's API after a push is ingested.
+    /// </summary>
+    public static IServiceCollection AddDevPulseCommitStatsProviders(this IServiceCollection services)
+    {
+        services.AddHttpClient<ICommitStatsProvider, GitHubCommitStatsProvider>(client =>
+        {
+            client.BaseAddress = new Uri("https://api.github.com/");
+            // Short timeout: this runs inline in the push-ingestion consumer, one
+            // call per commit. A slow GitHub must not stall the queue for long.
+            client.Timeout = TimeSpan.FromSeconds(10);
+        });
+
+        return services;
+    }
 }

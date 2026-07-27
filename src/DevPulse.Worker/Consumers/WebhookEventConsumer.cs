@@ -45,6 +45,7 @@ internal sealed class WebhookEventConsumer : RabbitMqConsumerBase<PushWebhookEve
     {
         var dbContext = services.GetRequiredService<ApplicationDbContext>();
         var publisher = services.GetRequiredService<IMessagePublisher>();
+        var statsProvider = services.GetRequiredService<ICommitStatsProvider>();
 
         if (message.Commits.Count == 0)
         {
@@ -67,6 +68,17 @@ internal sealed class WebhookEventConsumer : RabbitMqConsumerBase<PushWebhookEve
             .ToListAsync(cancellationToken);
 
         var known = existingShas.ToHashSet(StringComparer.Ordinal);
+
+        // Only fetched when there is at least one new commit to enrich, and only
+        // for GitHub — GitLab pushes carry no stats provider today (see
+        // ServiceCollectionExtensions.AddDevPulseCommitStatsProviders).
+        var repositoryFullName = message.Provider == RepositoryProvider.GitHub
+            ? await dbContext.Repositories
+                .AsNoTracking()
+                .Where(r => r.Id == message.RepositoryId)
+                .Select(r => r.FullName)
+                .FirstOrDefaultAsync(cancellationToken)
+            : null;
 
         var emails = message.Commits
             .Select(c => c.AuthorEmail)
@@ -93,6 +105,18 @@ internal sealed class WebhookEventConsumer : RabbitMqConsumerBase<PushWebhookEve
             var commitId = Guid.CreateVersion7();
             var files = BuildFiles(commitId, payload);
 
+            // Best-effort enrichment: a null result (no token configured, 404, rate
+            // limited, network error) just leaves additions/deletions at zero rather
+            // than failing ingestion of the commit itself.
+            var stats = repositoryFullName is not null
+                ? await statsProvider.GetCommitStatsAsync(repositoryFullName, payload.Sha, cancellationToken)
+                : null;
+
+            if (stats is not null)
+            {
+                ApplyFileStats(files, stats.Files);
+            }
+
             usersByEmail.TryGetValue(payload.AuthorEmail ?? string.Empty, out var authorId);
 
             dbContext.Commits.Add(new Commit
@@ -108,8 +132,8 @@ internal sealed class WebhookEventConsumer : RabbitMqConsumerBase<PushWebhookEve
                 CommittedAt = payload.Timestamp,
                 IndexedAt = DateTime.UtcNow,
                 FilesChanged = files.Count,
-                Additions = 0,
-                Deletions = 0,
+                Additions = stats?.Additions ?? 0,
+                Deletions = stats?.Deletions ?? 0,
                 ParentSha = null
             });
 
@@ -170,13 +194,44 @@ internal sealed class WebhookEventConsumer : RabbitMqConsumerBase<PushWebhookEve
         }
 
         // Push payloads list changed paths but carry no per-file line counts; those
-        // are only available from the provider's commit API, which this pass does
-        // not call. Additions/deletions therefore stay zero until that is added.
+        // come from the provider's commit API instead, applied afterwards by
+        // ApplyFileStats when that call succeeds.
         Add(payload.AddedFiles, FileChangeType.Added);
         Add(payload.ModifiedFiles, FileChangeType.Modified);
         Add(payload.RemovedFiles, FileChangeType.Deleted);
 
         return files;
+    }
+
+    /// <summary>
+    /// Copies provider-reported per-file line counts onto the matching
+    /// <see cref="CommitFile"/> rows built from the push payload, matched by path.
+    /// </summary>
+    /// <remarks>
+    /// Matched by path rather than index: the provider's file list can differ in
+    /// order or, for renames, in count from the push payload's added/modified/
+    /// removed lists. A path with no match (e.g. a rename the push payload didn't
+    /// carry) is simply left at zero rather than guessed.
+    /// </remarks>
+    private static void ApplyFileStats(List<CommitFile> files, IReadOnlyList<CommitFileStats> fileStats)
+    {
+        if (fileStats.Count == 0)
+        {
+            return;
+        }
+
+        var statsByPath = fileStats
+            .GroupBy(f => f.Path, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+        foreach (var file in files)
+        {
+            if (statsByPath.TryGetValue(file.FilePath, out var match))
+            {
+                file.Additions = match.Additions;
+                file.Deletions = match.Deletions;
+            }
+        }
     }
 
     private static string Truncate(string? value, int maxLength)
